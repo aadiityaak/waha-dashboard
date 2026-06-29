@@ -224,8 +224,94 @@ def index():
 @app.route("/users")
 @admin_required
 def users_list():
-    rows = get_db().execute("SELECT id, username, role FROM users ORDER BY id").fetchall()
-    return render_template_string(USERS_TPL, username=session.get("username"), role=session.get("role"), users=rows)
+    db = get_db()
+    rows = db.execute("SELECT id, username, role FROM users ORDER BY id").fetchall()
+    mapped = db.execute(
+        """SELECT sm.waha_session_name, u.username
+        FROM sessions_map sm JOIN users u ON u.id = sm.user_id
+        ORDER BY sm.waha_session_name, u.username"""
+    ).fetchall()
+    session_names = []
+    try:
+        _, data = waha("GET", "/api/sessions")
+        session_names = sorted({s.get("name") for s in json.loads(data) if s.get("name")})
+    except Exception:
+        pass
+    return render_template_string(
+        USERS_TPL,
+        username=session.get("username"),
+        role=session.get("role"),
+        users=rows,
+        mapped=mapped,
+        session_names=session_names,
+    )
+
+
+@app.route("/users/create", methods=["POST"])
+@admin_required
+def users_create():
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    role = request.form.get("role", "user")
+    if not username or not password:
+        flash("Username dan password wajib diisi", "danger")
+        return redirect(url_for("users_list"))
+    if role not in {"admin", "user"}:
+        role = "user"
+    try:
+        get_db().execute(
+            "INSERT INTO users (username, password_hash, role) VALUES (?,?,?)",
+            (username, hash_password(password), role),
+        )
+        get_db().commit()
+        flash(f"User '{username}' dibuat", "success")
+    except sqlite3.IntegrityError:
+        flash("Username sudah dipakai", "danger")
+    return redirect(url_for("users_list"))
+
+
+@app.route("/users/delete", methods=["POST"])
+@admin_required
+def users_delete():
+    user_id = request.form.get("user_id", type=int)
+    if not user_id:
+        flash("User tidak valid", "danger")
+        return redirect(url_for("users_list"))
+    if user_id == session.get("user_id"):
+        flash("Tidak bisa hapus user login sendiri", "danger")
+        return redirect(url_for("users_list"))
+    db = get_db()
+    row = db.execute("SELECT username FROM users WHERE id=?", (user_id,)).fetchone()
+    if not row:
+        flash("User tidak ditemukan", "danger")
+        return redirect(url_for("users_list"))
+    db.execute("DELETE FROM sessions_map WHERE user_id=?", (user_id,))
+    db.execute("DELETE FROM users WHERE id=?", (user_id,))
+    db.commit()
+    flash(f"User '{row['username']}' dihapus", "info")
+    return redirect(url_for("users_list"))
+
+
+@app.route("/sessions/assign", methods=["POST"])
+@admin_required
+def sessions_assign():
+    user_id = request.form.get("user_id", type=int)
+    session_name = request.form.get("session_name", "").strip()
+    if not user_id or not session_name:
+        flash("User dan session wajib dipilih", "danger")
+        return redirect(url_for("users_list"))
+    row = get_db().execute("SELECT username FROM users WHERE id=?", (user_id,)).fetchone()
+    if not row:
+        flash("User tidak ditemukan", "danger")
+        return redirect(url_for("users_list"))
+    get_db().execute("DELETE FROM sessions_map WHERE waha_session_name=?", (session_name,))
+    get_db().execute(
+        "INSERT INTO sessions_map (user_id, waha_session_name) VALUES (?,?)",
+        (user_id, session_name),
+    )
+    get_db().commit()
+    flash(f"Session '{session_name}' di-assign ke '{row['username']}'", "success")
+    return redirect(url_for("users_list"))
 
 
 @app.route("/session/start", methods=["POST"])
@@ -431,10 +517,66 @@ document.querySelectorAll('.qr-btn').forEach(btn => {
 
 USERS_TPL = BASE.replace("{% block content %}{% endblock %}", """{% block content %}
 <h4><i class="bi bi-people"></i> Users</h4>
-<div class="card p-0 mt-3"><table class="table table-dark table-striped mb-0">
-<thead><tr><th>ID</th><th>Username</th><th>Role</th></tr></thead><tbody>
-{% for u in users %}<tr><td>{{ u.id }}</td><td>{{ u.username }}</td><td><span class="badge bg-{{ 'primary' if u.role=='admin' else 'secondary' }}">{{ u.role }}</span></td></tr>{% endfor %}
-</tbody></table></div>
+<div class="row g-3 mt-1">
+  <div class="col-lg-5">
+    <div class="card p-3">
+      <h5 class="mb-3">Buat User</h5>
+      <form method="post" action="{{ app_root }}/users/create">
+        <div class="mb-3"><label class="form-label">Username</label><input name="username" class="form-control" required></div>
+        <div class="mb-3"><label class="form-label">Password</label><input name="password" type="password" class="form-control" required></div>
+        <div class="mb-3"><label class="form-label">Role</label><select name="role" class="form-select"><option value="user">user</option><option value="admin">admin</option></select></div>
+        <button class="btn btn-primary w-100">Buat User</button>
+      </form>
+    </div>
+    <div class="card p-3 mt-3">
+      <h5 class="mb-3">Assign Session Lama</h5>
+      <form method="post" action="{{ app_root }}/sessions/assign">
+        <div class="mb-3"><label class="form-label">Session WAHA</label><select name="session_name" class="form-select" required>{% for name in session_names %}<option value="{{ name }}">{{ name }}</option>{% endfor %}</select></div>
+        <div class="mb-3"><label class="form-label">Owner</label><select name="user_id" class="form-select" required>{% for u in users %}<option value="{{ u.id }}">{{ u.username }} ({{ u.role }})</option>{% endfor %}</select></div>
+        <button class="btn btn-outline-info w-100">Assign</button>
+      </form>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card p-0">
+      <table class="table table-dark table-striped mb-0 align-middle">
+        <thead><tr><th>ID</th><th>Username</th><th>Role</th><th style="width:1%">Aksi</th></tr></thead>
+        <tbody>
+        {% for u in users %}
+        <tr>
+          <td>{{ u.id }}</td>
+          <td>{{ u.username }}</td>
+          <td><span class="badge bg-{{ 'primary' if u.role=='admin' else 'secondary' }}">{{ u.role }}</span></td>
+          <td>
+            {% if u.id != session.user_id %}
+            <form method="post" action="{{ app_root }}/users/delete" onsubmit="return confirm('Hapus user {{ u.username }}?')">
+              <input type="hidden" name="user_id" value="{{ u.id }}">
+              <button class="btn btn-outline-danger btn-sm">Hapus</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card p-3 mt-3">
+      <h5 class="mb-3">Mapping Session</h5>
+      <div class="table-responsive">
+        <table class="table table-dark table-striped mb-0">
+          <thead><tr><th>Session</th><th>Owner</th></tr></thead>
+          <tbody>
+          {% for m in mapped %}
+          <tr><td>{{ m.waha_session_name }}</td><td>{{ m.username }}</td></tr>
+          {% else %}
+          <tr><td colspan="2" class="text-center text-light-emphasis">Belum ada mapping</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}""")
 
 
