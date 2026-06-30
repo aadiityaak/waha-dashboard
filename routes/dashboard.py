@@ -1,5 +1,7 @@
 import json
 import secrets
+import urllib.error
+import urllib.request
 
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 
@@ -60,6 +62,25 @@ def docs():
         api_key=(user["api_key"] if user else ""),
         gateway_base=public_base_url(),
     )
+
+
+@bp.route("/docs/test-send", methods=["POST"])
+@login_required
+def docs_test_send():
+    if not current_user():
+        return {"error": "unauthorized"}, 401
+    session_name = request.form.get("session_name", "").strip()
+    chat_id = request.form.get("chatId", "").strip()
+    text = request.form.get("text", "").strip()
+    if not session_name or not can_access_session(session_name):
+        return {"ok": False, "error": "Akses session ditolak"}, 403
+    if not chat_id or not text:
+        return {"ok": False, "error": "Nomor dan isi pesan wajib diisi"}, 400
+    try:
+        st, data = waha("POST", "/api/sendText", {"session": session_name, "chatId": chat_id, "text": text})
+        return data, int(st), {"Content-Type": "application/json"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}, 500
 
 
 @bp.route("/me/api-key/regenerate", methods=["POST"])
