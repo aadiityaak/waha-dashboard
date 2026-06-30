@@ -2,7 +2,7 @@ import sqlite3
 
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 
-from db import get_db, hash_password, verify_password
+from db import current_user, get_db, hash_password, verify_password
 
 bp = Blueprint("auth", __name__)
 
@@ -55,3 +55,55 @@ def register():
         except sqlite3.IntegrityError:
             flash("Username sudah dipakai", "danger")
     return render_template("register.html", username=session.get("username"), role=session.get("role"))
+
+
+@bp.route("/profile", methods=["GET", "POST"])
+def profile():
+    if "user_id" not in session:
+        flash("Silakan login dulu", "warning")
+        return redirect(url_for("auth.login"))
+    user = current_user()
+    if not user:
+        session.clear()
+        flash("Session user tidak valid", "danger")
+        return redirect(url_for("auth.login"))
+    if request.method == "POST":
+        username = request.form["username"].strip()
+        current_password = request.form.get("current_password", "")
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        if not username:
+            flash("Username wajib diisi", "danger")
+            return render_template("profile.html", profile_user=user, username=session.get("username"), role=session.get("role"))
+        updates = []
+        params = []
+        if username != user["username"]:
+            updates.append("username=?")
+            params.append(username)
+        if new_password or confirm_password or current_password:
+            ok, _ = verify_password(get_db().execute("SELECT password_hash FROM users WHERE id=?", (user["id"],)).fetchone()["password_hash"], current_password)
+            if not ok:
+                flash("Password saat ini salah", "danger")
+                return render_template("profile.html", profile_user=user, username=session.get("username"), role=session.get("role"))
+            if len(new_password) < 6:
+                flash("Password baru minimal 6 karakter", "danger")
+                return render_template("profile.html", profile_user=user, username=session.get("username"), role=session.get("role"))
+            if new_password != confirm_password:
+                flash("Konfirmasi password baru tidak cocok", "danger")
+                return render_template("profile.html", profile_user=user, username=session.get("username"), role=session.get("role"))
+            updates.append("password_hash=?")
+            params.append(hash_password(new_password))
+        if not updates:
+            flash("Tidak ada perubahan", "info")
+            return redirect(url_for("auth.profile"))
+        params.append(user["id"])
+        try:
+            get_db().execute(f"UPDATE users SET {', '.join(updates)} WHERE id=?", tuple(params))
+            get_db().commit()
+        except sqlite3.IntegrityError:
+            flash("Username sudah dipakai", "danger")
+            return render_template("profile.html", profile_user=user, username=session.get("username"), role=session.get("role"))
+        session["username"] = username
+        flash("Profil berhasil diperbarui", "success")
+        return redirect(url_for("auth.profile"))
+    return render_template("profile.html", profile_user=user, username=session.get("username"), role=session.get("role"))

@@ -80,7 +80,7 @@
       </ul>
       {% if username %}
       <div style="display:flex;align-items:center;gap:12px;">
-        <span class="text-light-emphasis"><i class="bi bi-person-circle"></i> {{ username }}</span>
+        <a href="{{ app_root }}/profile" class="nav-link" style="padding:8px 12px;"><i class="bi bi-person-circle"></i> {{ username }}</a>
         <a href="{{ app_root }}/logout" class="btn btn-outline-secondary btn-sm">Logout</a>
       </div>
       {% endif %}
@@ -101,6 +101,7 @@
 {% endwith %}
 {% block content %}{% endblock %}
 </div>
+<div class="modal fade" id="confirmModal" tabindex="-1"><div class="modal-dialog modal-sm"><div class="modal-content"><div class="modal-header border-secondary"><h5 class="modal-title">Konfirmasi</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p id="confirmMessage" class="m-0">Lanjut?</p></div><div class="modal-footer border-secondary"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button type="button" class="btn btn-primary" id="confirmSubmitBtn">Ya, lanjut</button></div></div></div></div>
 <script>const APP_ROOT = {{ app_root|tojson }};</script>
 {% block scripts %}{% endblock %}
 </body>
