@@ -44,7 +44,7 @@ def gateway_status(session_name):
 
 @bp.route("/gateway/<session_name>/send-text", methods=["POST"])
 def gateway_send_text(session_name):
-    api_key = request.headers.get("X-Api-Key", "") or request.args.get("api_key", "")
+    api_key = request.headers.get("X-Api-Key", "") or request.args.get("api_key", "") or request.form.get("api_key", "")
     owner = gateway_owner(session_name, api_key)
     if not owner:
         return {"error": "api key invalid"}, 403
