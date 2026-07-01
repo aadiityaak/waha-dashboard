@@ -5,6 +5,21 @@ import sqlite3
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, session, url_for
 
 from db import get_db, hash_password
+from flask import current_app
+
+
+def _user_from_api_key(api_key: str):
+    if not api_key:
+        return None
+    return get_db().execute("SELECT id, username, role, api_key FROM users WHERE api_key=?", (api_key,)).fetchone()
+
+
+def _require_admin_api_key():
+    api_key = request.headers.get("X-Api-Key", "").strip() or request.args.get("api_key", "").strip()
+    user = _user_from_api_key(api_key)
+    if not user or user["role"] != "admin":
+        return None, (jsonify(ok=False, error="Akses ditolak"), 403)
+    return user, None
 from helpers import admin_required, waha
 
 bp = Blueprint("admin", __name__)
@@ -161,6 +176,14 @@ def whatsapp_send_random():
         except Exception as e:
             last_error = {"session": session_name, "error": str(e)}
     return jsonify(ok=False, error="Semua session gagal", last=last_error), 502
+
+
+@bp.route("/api/whatsapp/send-random", methods=["POST"])
+def whatsapp_send_random_api():
+    _, err = _require_admin_api_key()
+    if err:
+        return err
+    return whatsapp_send_random()
 
 
 @bp.route("/whatsapp/send-random/json", methods=["POST"])

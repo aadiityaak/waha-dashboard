@@ -50,6 +50,23 @@
   </div>
 </div>
 
+<div class="card p-4 mb-3">
+  <h5>Admin kirim random</h5>
+  <p class="small" style="color:#475569; line-height:1.7">Admin bisa kirim ke nomor tanpa pilih session. Sistem ambil session aktif random, lalu fallback ke session aktif lain kalau gagal.</p>
+  <div class="table-responsive">
+    <table class="table table-striped mb-0 align-middle">
+      <tbody>
+        <tr><th style="width:160px">Method</th><td><span class="badge bg-warning">POST</span></td></tr>
+        <tr><th>URL</th><td><code>{{ app_root }}/admin/whatsapp/send-random</code></td></tr>
+        <tr><th>JSON URL</th><td><code>{{ app_root }}/api/whatsapp/send-random</code></td></tr>
+        <tr><th>Header</th><td><code>X-Api-Key: {{ api_key }}</code></td></tr>
+        <tr><th>Body JSON</th><td><code>{"chatId":"62812xxxx@c.us","text":"Halo"}</code></td></tr>
+        <tr><th>Response</th><td><code>{"ok":true,"session":"...","status":201}</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 <div class="card test-send-card mb-3">
   <h5 class="mb-3">Test kirim pesan</h5>
   <form id="testSendForm" class="test-send-form" action="{{ app_root }}/docs/test-send">

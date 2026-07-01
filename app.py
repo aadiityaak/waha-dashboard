@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """WAHA Dashboard Multi-User"""
-from flask import Flask
+from flask import Flask, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import APP_ROOT, PORT, SECRET_KEY
@@ -19,7 +19,8 @@ def _close_db(_e):
 @app.context_processor
 def inject_globals():
     user = current_user()
-    return {"app_root": APP_ROOT, "nav_avatar": user["avatar_path"] if user else None}
+    app_root = request.script_root or APP_ROOT
+    return {"app_root": app_root, "nav_avatar": user["avatar_path"] if user else None}
 
 
 init_db()
