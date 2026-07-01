@@ -58,6 +58,10 @@ def index():
     owner_rows = get_db().execute("SELECT u.username, m.waha_session_name FROM sessions_map m JOIN users u ON u.id = m.user_id").fetchall()
     owner_map = {row["waha_session_name"]: row["username"] for row in owner_rows}
     sessions = [s for s in sessions if s.get("name") != "sesi baru"]
+    live_names = {s.get("name") for s in sessions}
+    for row in owner_rows:
+        if row["waha_session_name"] not in live_names:
+            sessions.append({"name": row["waha_session_name"], "status": "STOPPED", "owner": row["username"]})
     for s in sessions:
         s["owner"] = owner_map.get(s.get("name"), "-")
     users = get_db().execute("SELECT id, username FROM users ORDER BY username").fetchall()
