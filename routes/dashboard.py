@@ -146,7 +146,7 @@ def session_start():
             get_db().commit()
         flash(f"Session '{name}' started. QR akan dibuka otomatis." if started_ok else f"Gagal start session (HTTP {st}): {body[:200]}", "success" if started_ok else "danger")
         if started_ok:
-            return redirect(url_for("dashboard.index", qr=name))
+            return redirect(url_for("dashboard.index", qr=name, r=secrets.token_hex(4)))
     except Exception as e:
         flash(f"Error: {e}", "danger")
     return redirect(url_for("dashboard.index"))
